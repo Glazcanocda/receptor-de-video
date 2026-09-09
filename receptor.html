@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Receptor Radiólogo - Vista Ecográfica</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #0a0a0a; color: #fff; margin: 0; padding: 20px; text-align: center; }
+        .controls { margin-bottom: 20px; }
+        input, button { padding: 10px 15px; font-size: 1rem; border-radius: 5px; border: none; }
+        input { width: 250px; text-align: center; }
+        button { background-color: #007bff; color: white; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        video { width: 90%; max-width: 1200px; height: 500px; background: #111; border: 2px solid #333; border-radius: 8px; }
+        #status { margin-top: 10px; font-weight: bold; color: #ffc107; }
+    </style>
+</head>
+<body>
+
+    <h2>Recepción de Ecografía en Tiempo Real</h2>
+
+    <div class="controls">
+        <input type="text" id="targetId" value="ecografo-prueba-2026" placeholder="Ingresa ID del Ecógrafo">
+        <button id="connectBtn" onclick="conectarEcografo()">Conectar al Ecógrafo</button>
+        <div id="status">Desconectado</div>
+    </div>
+
+    <div>
+        <video id="remoteVideo" autoplay playsinline controls></video>
+    </div>
+
+    <script>
+        // Configurar PeerJS con Servidores STUN de Google para atravesar redes locales
+        const peer = new Peer({
+            config: {
+                'iceServers': [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' }
+                ]
+            }
+        });
+
+        const remoteVideo = document.getElementById('remoteVideo');
+        const statusDiv = document.getElementById('status');
+
+        function conectarEcografo() {
+            const targetId = document.getElementById('targetId').value;
+            statusDiv.innerText = "Conectando con el ecógrafo...";
+            statusDiv.style.color = "#ffc107";
+
+            // Intentar llamada
+            const call = peer.call(targetId, null);
+
+            if (!call) {
+                statusDiv.innerText = "Error: No se pudo iniciar la llamada. Verifica que el emisor esté abierto.";
+                statusDiv.style.color = "#dc3545";
+                return;
+            }
+
+            call.on('stream', (remoteStream) => {
+                statusDiv.innerText = " Transmisión en Vivo Establecida";
+                statusDiv.style.color = "#28a745";
+                remoteVideo.srcObject = remoteStream;
+                remoteVideo.play();
+            });
+
+            call.on('error', (err) => {
+                console.error("Error durante la llamada:", err);
+                statusDiv.innerText = "Error de conexión con el emisor.";
+                statusDiv.style.color = "#dc3545";
+            });
+        }
+    </script>
+</body>
+</html>
