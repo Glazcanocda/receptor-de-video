@@ -10,8 +10,6 @@
         .card { background: #1e1e1e; padding: 20px; margin: 15px auto; border-radius: 8px; max-width: 600px; border: 1px solid #333; }
         #status { font-size: 1.2rem; font-weight: bold; color: #ffc107; margin: 15px 0; }
         video { width: 100%; max-width: 800px; height: 450px; background: #000; border: 2px solid #00d2ff; border-radius: 8px; }
-        .btn { padding: 12px 24px; font-size: 1rem; font-weight: bold; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        .btn:hover { background: #0056b3; }
         #link-box { word-break: break-all; margin-top: 10px; padding: 10px; background: #000; border-radius: 5px; color: #00ff88; display: none; }
     </style>
 </head>
@@ -32,7 +30,6 @@
         const linkBox = document.getElementById('link-box');
         const titulo = document.getElementById('titulo');
 
-        // Leer si la URL trae un ID de sala (Ejemplo: ?sala=12345)
         const urlParams = new URLSearchParams(window.location.search);
         const salaParam = urlParams.get('sala');
 
@@ -41,16 +38,14 @@
         };
 
         if (!salaParam) {
-            // --- MODO EMISOR (Ecógrafo) ---
             titulo.innerText = "Emisor - Ecógrafo en Vivo";
             statusDiv.innerText = "Solicitando permisos de cámara/capturadora...";
 
             navigator.mediaDevices.getUserMedia({ video: true, audio: true })
                 .then(stream => {
                     videoElem.srcObject = stream;
-                    videoElem.muted = true; // Evita eco en el emisor
+                    videoElem.muted = true;
 
-                    // Crear un ID aleatorio e irrepetible para asegurar la conexión
                     const salaId = "eco-" + Math.floor(100000 + Math.random() * 900000);
                     const peer = new Peer(salaId, peerConfig);
 
@@ -79,9 +74,8 @@
                 });
 
         } else {
-            // --- MODO RECEPTOR (Radiólogo) ---
             titulo.innerText = "Receptor - Radiólogo en Línea";
-            statusDiv.innerText = "Conectando automáticamente a la sala: " + salaParam;
+            statusDiv.innerText = "Conectando automáticamente a la sala...";
 
             const peer = new Peer(peerConfig);
 
