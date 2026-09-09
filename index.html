@@ -12,6 +12,7 @@
         video { width: 100%; max-width: 800px; height: 450px; background: #000; border: 2px solid #00d2ff; border-radius: 8px; margin-top: 10px; }
         #link-container { display: none; margin-top: 15px; padding: 15px; background: #000; border-radius: 5px; border: 1px solid #00ff88; }
         a { color: #00ff88; font-weight: bold; word-break: break-all; text-decoration: underline; font-size: 1.1rem; }
+        button { padding: 10px 20px; font-size: 1rem; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -21,9 +22,10 @@
     <div class="card">
         <div id="status">Iniciando sistema...</div>
         <div id="link-container">
-            <div>Enlace único generado para el Radiólogo:</div>
+            <div>Enlace único para la consulta del Radiólogo:</div>
             <p><a id="link-radiologo" href="#" target="_blank">Cargando enlace...</a></p>
         </div>
+        <button id="retryBtn" style="display:none;" onclick="location.reload()">Reintentar Conexión</button>
     </div>
 
     <video id="videoElem" autoplay playsinline controls></video>
@@ -34,6 +36,7 @@
         const linkContainer = document.getElementById('link-container');
         const linkRadiologo = document.getElementById('link-radiologo');
         const titulo = document.getElementById('titulo');
+        const retryBtn = document.getElementById('retryBtn');
 
         const urlParams = new URLSearchParams(window.location.search);
         const salaParam = urlParams.get('sala');
@@ -50,21 +53,22 @@
         };
 
         if (!salaParam) {
-            // --- MODO EMISOR (Ecógrafo) ---
+            // MODO EMISOR (Ecógrafo)
             titulo.innerText = "Emisor - Ecógrafo en Vivo";
             statusDiv.innerText = "Solicitando cámara/capturadora...";
 
             navigator.mediaDevices.getUserMedia({ video: true, audio: true })
                 .then(stream => {
                     videoElem.srcObject = stream;
-                    videoElem.muted = true; // Evita eco local
+                    videoElem.muted = true;
 
-                    const idUnico = "eco-" + Math.floor(100000 + Math.random() * 900000);
+                    // Usar un ID de sala limpio sin caracteres especiales
+                    const idUnico = "salaecografia" + Math.floor(1000 + Math.random() * 9000);
                     const peer = new Peer(idUnico, peerConfig);
 
                     peer.on('open', (id) => {
                         const urlFinal = window.location.origin + window.location.pathname + "?sala=" + id;
-                        statusDiv.innerText = " TRANSMITIENDO EN VIVO. Comparte el enlace:";
+                        statusDiv.innerText = " TRANSMITIENDO EN VIVO";
                         statusDiv.style.color = "#00ff88";
                         
                         linkRadiologo.href = urlFinal;
@@ -73,37 +77,41 @@
                     });
 
                     peer.on('call', (call) => {
+                        statusDiv.innerText = " Radiólogo conectando... Enviando señal";
                         call.answer(stream);
-                        statusDiv.innerText = " Radiólogo conectado. Transmitiendo ecografía...";
+                        
+                        call.on('stream', () => {
+                            statusDiv.innerText = " Transmisión activa con el Radiólogo";
+                        });
                     });
 
                     peer.on('error', (err) => {
-                        statusDiv.innerText = "Error en Servidor PeerJS: " + err.type;
+                        statusDiv.innerText = "Error del Emisor: " + err.type;
                         statusDiv.style.color = "#ff4444";
+                        retryBtn.style.display = "inline-block";
                     });
                 })
                 .catch(err => {
-                    statusDiv.innerText = " Error: Otorga permisos de cámara/micrófono en Chrome.";
+                    statusDiv.innerText = " Error: Otorga permisos de cámara en el navegador.";
                     statusDiv.style.color = "#ff4444";
                 });
 
         } else {
-            // --- MODO RECEPTOR (Radiólogo) ---
+            // MODO RECEPTOR (Radiólogo)
             titulo.innerText = "Receptor - Radiólogo en Línea";
-            statusDiv.innerText = "Conectando al servidor de señalización...";
+            statusDiv.innerText = "Estableciendo conexión con la sala: " + salaParam;
 
             const peer = new Peer(peerConfig);
 
-            // Esperar a que el receptor esté 100% conectado antes de llamar
-            peer.on('open', (id) => {
-                statusDiv.innerText = "Conectando con el ecógrafo (" + salaParam + ")...";
-
-                try {
+            peer.on('open', () => {
+                // Pequeño retardo de 800ms para asegurar sincronización en el servidor de señalización
+                setTimeout(() => {
                     const call = peer.call(salaParam, null);
 
                     if (!call) {
-                        statusDiv.innerText = " Error: No se pudo iniciar la llamada. Verifica que el emisor esté abierto.";
+                        statusDiv.innerText = " El emisor no respondió. Haz clic en Reintentar.";
                         statusDiv.style.color = "#ff4444";
+                        retryBtn.style.display = "inline-block";
                         return;
                     }
 
@@ -111,23 +119,21 @@
                         statusDiv.innerText = " TRANSMISIÓN EN VIVO ESTABLECIDA";
                         statusDiv.style.color = "#00ff88";
                         videoElem.srcObject = remoteStream;
-                        videoElem.play().catch(e => console.log("Autoplay mitigado por el navegador"));
+                        videoElem.play();
                     });
 
                     call.on('error', (err) => {
                         statusDiv.innerText = " Error en la llamada: " + err;
                         statusDiv.style.color = "#ff4444";
+                        retryBtn.style.display = "inline-block";
                     });
-
-                } catch (e) {
-                    statusDiv.innerText = " Excepción al llamar: " + e.message;
-                    statusDiv.style.color = "#ff4444";
-                }
+                }, 800);
             });
 
             peer.on('error', (err) => {
-                statusDiv.innerText = " Error de conexión: La sala " + salaParam + " no existe o fue cerrada.";
+                statusDiv.innerText = " La sala no está disponible. Verifica que el emisor siga abierto.";
                 statusDiv.style.color = "#ff4444";
+                retryBtn.style.display = "inline-block";
             });
         }
     </script>
