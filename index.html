@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telemedicina Ecográfica</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #121212; color: #fff; text-align: center; margin: 0; padding: 20px; }
+        .card { background: #1e1e1e; padding: 20px; margin: 15px auto; border-radius: 8px; max-width: 650px; border: 1px solid #333; }
+        #status { font-size: 1.2rem; font-weight: bold; color: #ffc107; margin: 15px 0; }
+        video { width: 100%; max-width: 800px; height: 450px; background: #000; border: 2px solid #00d2ff; border-radius: 8px; margin-top: 10px; }
+        #link-container { display: none; margin-top: 15px; padding: 15px; background: #000; border-radius: 5px; border: 1px solid #00ff88; }
+        a { color: #00ff88; font-weight: bold; word-break: break-all; text-decoration: underline; font-size: 1.1rem; }
+    </style>
+</head>
+<body>
+
+    <h2 id="titulo">Sistema de Transmisión Ecográfica</h2>
+
+    <div class="card">
+        <div id="status">Iniciando sistema...</div>
+        <div id="link-container">
+            <div>Copia y abre este enlace en el equipo del Radiólogo:</div>
+            <p><a id="link-radiologo" href="#" target="_blank">Cargando enlace...</a></p>
+        </div>
+    </div>
+
+    <video id="videoElem" autoplay playsinline controls></video>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        const videoElem = document.getElementById('videoElem');
+        const linkContainer = document.getElementById('link-container');
+        const linkRadiologo = document.getElementById('link-radiologo');
+        const titulo = document.getElementById('titulo');
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const salaParam = urlParams.get('sala');
+
+        const peerConfig = {
+            config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] }
+        };
+
+        if (!salaParam) {
+            // MODO EMISOR (Ecógrafo)
+            titulo.innerText = "Emisor - Ecógrafo en Vivo";
+            statusDiv.innerText = "Solicitando cámara/capturadora...";
+
+            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                .then(stream => {
+                    videoElem.srcObject = stream;
+                    videoElem.muted = true; // Evita acople de sonido local
+
+                    // Generar un ID aleatorio e irrepetible
+                    const idUnico = "eco-" + Math.floor(100000 + Math.random() * 900000);
+                    const peer = new Peer(idUnico, peerConfig);
+
+                    peer.on('open', (id) => {
+                        const urlFinal = window.location.origin + window.location.pathname + "?sala=" + id;
+                        statusDiv.innerText = " TRANSMITIENDO EN VIVO";
+                        statusDiv.style.color = "#00ff88";
+                        
+                        linkRadiologo.href = urlFinal;
+                        linkRadiologo.innerText = urlFinal;
+                        linkContainer.style.display = "block";
+                    });
+
+                    peer.on('call', (call) => {
+                        call.answer(stream);
+                        statusDiv.innerText = " Radiólogo conectado. Transmitiendo en tiempo real...";
+                    });
+
+                    peer.on('error', (err) => {
+                        statusDiv.innerText = "Error de red: " + err.type;
+                        statusDiv.style.color = "#ff4444";
+                    });
+                })
+                .catch(err => {
+                    statusDiv.innerText = " Error: Otorga permisos de cámara/micrófono en Chrome.";
+                    statusDiv.style.color = "#ff4444";
+                });
+
+        } else {
+            // MODO RECEPTOR (Radiólogo)
+            titulo.innerText = "Receptor - Radiólogo en Línea";
+            statusDiv.innerText = "Conectando con el ecógrafo...";
+
+            const peer = new Peer(peerConfig);
+
+            peer.on('open', () => {
+                const call = peer.call(salaParam, null);
+
+                call.on('stream', (remoteStream) => {
+                    statusDiv.innerText = " TRANSMISIÓN EN VIVO ESTABLECIDA";
+                    statusDiv.style.color = "#00ff88";
+                    videoElem.srcObject = remoteStream;
+                    videoElem.play();
+                });
+
+                call.on('error', (err) => {
+                    statusDiv.innerText = " Error de conexión. Revisa que el emisor siga abierto.";
+                    statusDiv.style.color = "#ff4444";
+                });
+            });
+        }
+    </script>
+</body>
+</html>
