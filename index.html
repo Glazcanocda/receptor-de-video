@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Telemedicina Ecográfica</title>
+    <title>Telemedicina Ecográfica - Producción</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; background: #121212; color: #fff; text-align: center; margin: 0; padding: 20px; }
@@ -21,7 +21,7 @@
     <div class="card">
         <div id="status">Iniciando sistema...</div>
         <div id="link-container">
-            <div>Copia y abre este enlace en el equipo del Radiólogo:</div>
+            <div>Enlace único generado para el Radiólogo:</div>
             <p><a id="link-radiologo" href="#" target="_blank">Cargando enlace...</a></p>
         </div>
     </div>
@@ -38,8 +38,24 @@
         const urlParams = new URLSearchParams(window.location.search);
         const salaParam = urlParams.get('sala');
 
+        // Configuración robusta con Servidores STUN y TURN (OpenRelay)
         const peerConfig = {
-            config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] }
+            config: {
+                'iceServers': [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    {
+                        urls: 'turn:openrelay.metered.ca:80',
+                        username: 'openrelay',
+                        credential: 'openrelay'
+                    },
+                    {
+                        urls: 'turn:openrelay.metered.ca:443',
+                        username: 'openrelay',
+                        credential: 'openrelay'
+                    }
+                ]
+            }
         };
 
         if (!salaParam) {
@@ -50,15 +66,14 @@
             navigator.mediaDevices.getUserMedia({ video: true, audio: true })
                 .then(stream => {
                     videoElem.srcObject = stream;
-                    videoElem.muted = true; // Evita acople de sonido local
+                    videoElem.muted = true; // Mutear video local para evitar acople acústico
 
-                    // Generar un ID aleatorio e irrepetible
                     const idUnico = "eco-" + Math.floor(100000 + Math.random() * 900000);
                     const peer = new Peer(idUnico, peerConfig);
 
                     peer.on('open', (id) => {
                         const urlFinal = window.location.origin + window.location.pathname + "?sala=" + id;
-                        statusDiv.innerText = " TRANSMITIENDO EN VIVO";
+                        statusDiv.innerText = " TRANSMITIENDO EN VIVO. Comparte el enlace:";
                         statusDiv.style.color = "#00ff88";
                         
                         linkRadiologo.href = urlFinal;
@@ -68,11 +83,11 @@
 
                     peer.on('call', (call) => {
                         call.answer(stream);
-                        statusDiv.innerText = " Radiólogo conectado. Transmitiendo en tiempo real...";
+                        statusDiv.innerText = " Radiólogo conectado. Transmitiendo ecografía...";
                     });
 
                     peer.on('error', (err) => {
-                        statusDiv.innerText = "Error de red: " + err.type;
+                        statusDiv.innerText = "Error en Servidor PeerJS: " + err.type;
                         statusDiv.style.color = "#ff4444";
                     });
                 })
@@ -84,24 +99,35 @@
         } else {
             // MODO RECEPTOR (Radiólogo)
             titulo.innerText = "Receptor - Radiólogo en Línea";
-            statusDiv.innerText = "Conectando con el ecógrafo...";
+            statusDiv.innerText = "Conectando con la sala: " + salaParam;
 
             const peer = new Peer(peerConfig);
 
             peer.on('open', () => {
                 const call = peer.call(salaParam, null);
 
+                if (!call) {
+                    statusDiv.innerText = " Error de llamada. El emisor no responde.";
+                    statusDiv.style.color = "#ff4444";
+                    return;
+                }
+
                 call.on('stream', (remoteStream) => {
                     statusDiv.innerText = " TRANSMISIÓN EN VIVO ESTABLECIDA";
                     statusDiv.style.color = "#00ff88";
                     videoElem.srcObject = remoteStream;
-                    videoElem.play();
+                    videoElem.play().catch(e => console.log("Autoplay prevenido por navegador"));
                 });
 
                 call.on('error', (err) => {
-                    statusDiv.innerText = " Error de conexión. Revisa que el emisor siga abierto.";
+                    statusDiv.innerText = " Error de conexión WebRTC: " + err;
                     statusDiv.style.color = "#ff4444";
                 });
+            });
+
+            peer.on('error', (err) => {
+                statusDiv.innerText = " Error: No se encontró la sala " + salaParam + ". ¿El emisor sigue abierto?";
+                statusDiv.style.color = "#ff4444";
             });
         }
     </script>
