@@ -3,78 +3,110 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Emisor Ecógrafo - Transmisión en Vivo</title>
+    <title>Transmisión Ecográfica en Vivo</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; background: #121212; color: #fff; text-align: center; margin: 0; padding: 20px; }
-        .card { background: #1e1e1e; padding: 15px; margin: 15px auto; border-radius: 8px; max-width: 600px; border: 1px solid #333; }
-        #status { font-size: 1.2rem; font-weight: bold; color: #ffc107; margin: 10px 0; }
+        .card { background: #1e1e1e; padding: 20px; margin: 15px auto; border-radius: 8px; max-width: 600px; border: 1px solid #333; }
+        #status { font-size: 1.2rem; font-weight: bold; color: #ffc107; margin: 15px 0; }
         video { width: 100%; max-width: 800px; height: 450px; background: #000; border: 2px solid #00d2ff; border-radius: 8px; }
+        .btn { padding: 12px 24px; font-size: 1rem; font-weight: bold; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .btn:hover { background: #0056b3; }
+        #link-box { word-break: break-all; margin-top: 10px; padding: 10px; background: #000; border-radius: 5px; color: #00ff88; display: none; }
     </style>
 </head>
 <body>
 
-    <h2>Emisor - Ecografía en Tiempo Real</h2>
+    <h2 id="titulo">Telemedicina Ecográfica</h2>
 
     <div class="card">
-        <div>Estado del Sistema:</div>
-        <div id="status">Iniciando cámara y servidor...</div>
+        <div id="status">Cargando sistema...</div>
+        <div id="link-box"></div>
     </div>
 
-    <video id="localVideo" autoplay playsinline muted></video>
+    <video id="videoElem" autoplay playsinline controls></video>
 
     <script>
-        // ID Exacto de la sala
-        const SALA_ID = "eco-sala-chile-2026";
         const statusDiv = document.getElementById('status');
-        const localVideo = document.getElementById('localVideo');
+        const videoElem = document.getElementById('videoElem');
+        const linkBox = document.getElementById('link-box');
+        const titulo = document.getElementById('titulo');
 
-        // Configuración STUN para atravesar routers y firewalls
-        const peer = new Peer(SALA_ID, {
-            config: {
-                'iceServers': [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' }
-                ]
-            }
-        });
+        // Leer si la URL trae un ID de sala (Ejemplo: ?sala=12345)
+        const urlParams = new URLSearchParams(window.location.search);
+        const salaParam = urlParams.get('sala');
 
-        // Capturar video de la capturadora/cámara y micrófono
-        navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
-            audio: true
-        })
-        .then(stream => {
-            localVideo.srcObject = stream;
+        const peerConfig = {
+            config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }] }
+        };
 
-            peer.on('open', (id) => {
-                statusDiv.innerText = " TRANSMITIENDO. Sala lista: " + id;
-                statusDiv.style.color = "#00ff88";
-            });
+        if (!salaParam) {
+            // --- MODO EMISOR (Ecógrafo) ---
+            titulo.innerText = "Emisor - Ecógrafo en Vivo";
+            statusDiv.innerText = "Solicitando permisos de cámara/capturadora...";
 
-            // Responder cuando el radiólogo llame
-            peer.on('call', (call) => {
-                call.answer(stream);
-                statusDiv.innerText = " Radiólogo conectado. Transmitiendo en vivo...";
-                statusDiv.style.color = "#00ff88";
+            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                .then(stream => {
+                    videoElem.srcObject = stream;
+                    videoElem.muted = true; // Evita eco en el emisor
 
-                // Escuchar el audio del radiólogo
-                call.on('stream', (remoteAudioStream) => {
-                    const audio = new Audio();
-                    audio.srcObject = remoteAudioStream;
-                    audio.play();
+                    // Crear un ID aleatorio e irrepetible para asegurar la conexión
+                    const salaId = "eco-" + Math.floor(100000 + Math.random() * 900000);
+                    const peer = new Peer(salaId, peerConfig);
+
+                    peer.on('open', (id) => {
+                        const linkRadiologo = window.location.origin + window.location.pathname + "?sala=" + id;
+                        statusDiv.innerText = " TRANSMITIENDO. Envía este enlace al radiólogo:";
+                        statusDiv.style.color = "#00ff88";
+                        
+                        linkBox.style.display = "block";
+                        linkBox.innerHTML = `<a href="${linkRadiologo}" target="_blank" style="color:#00ff88;">${linkRadiologo}</a>`;
+                    });
+
+                    peer.on('call', (call) => {
+                        call.answer(stream);
+                        statusDiv.innerText = " Radiólogo conectado. Transmitiendo en tiempo real...";
+                    });
+
+                    peer.on('error', (err) => {
+                        statusDiv.innerText = "Error de red: " + err.type;
+                        statusDiv.style.color = "#ff4444";
+                    });
+                })
+                .catch(err => {
+                    statusDiv.innerText = " Error: Acceso denegado a la cámara/capturadora.";
+                    statusDiv.style.color = "#ff4444";
+                });
+
+        } else {
+            // --- MODO RECEPTOR (Radiólogo) ---
+            titulo.innerText = "Receptor - Radiólogo en Línea";
+            statusDiv.innerText = "Conectando automáticamente a la sala: " + salaParam;
+
+            const peer = new Peer(peerConfig);
+
+            peer.on('open', () => {
+                const call = peer.call(salaParam, null);
+
+                if (!call) {
+                    statusDiv.innerText = " Error: No se pudo conectar a la sala.";
+                    statusDiv.style.color = "#ff4444";
+                    return;
+                }
+
+                call.on('stream', (remoteStream) => {
+                    statusDiv.innerText = " TRANSMISIÓN EN VIVO ESTABLECIDA";
+                    statusDiv.style.color = "#00ff88";
+                    videoElem.srcObject = remoteStream;
+                    videoElem.play();
+                });
+
+                call.on('error', (err) => {
+                    statusDiv.innerText = " Error de enlace: " + err;
+                    statusDiv.style.color = "#ff4444";
                 });
             });
-        })
-        .catch(err => {
-            statusDiv.innerText = " Error al acceder a la capturadora/cámara: " + err.message;
-            statusDiv.style.color = "#ff4444";
-        });
-
-        peer.on('error', (err) => {
-            statusDiv.innerText = " Error de conexión PeerJS: " + err.type;
-            statusDiv.style.color = "#ff4444";
-        });
+        }
     </script>
 </body>
 </html>
