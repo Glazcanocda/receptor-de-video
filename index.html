@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Telemedicina Ecográfica - Producción</title>
+    <title>Telemedicina Ecográfica</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; background: #121212; color: #fff; text-align: center; margin: 0; padding: 20px; }
@@ -38,35 +38,26 @@
         const urlParams = new URLSearchParams(window.location.search);
         const salaParam = urlParams.get('sala');
 
-        // Configuración robusta con Servidores STUN y TURN (OpenRelay)
         const peerConfig = {
             config: {
                 'iceServers': [
                     { urls: 'stun:stun.l.google.com:19302' },
                     { urls: 'stun:stun1.l.google.com:19302' },
-                    {
-                        urls: 'turn:openrelay.metered.ca:80',
-                        username: 'openrelay',
-                        credential: 'openrelay'
-                    },
-                    {
-                        urls: 'turn:openrelay.metered.ca:443',
-                        username: 'openrelay',
-                        credential: 'openrelay'
-                    }
+                    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelay', credential: 'openrelay' },
+                    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelay', credential: 'openrelay' }
                 ]
             }
         };
 
         if (!salaParam) {
-            // MODO EMISOR (Ecógrafo)
+            // --- MODO EMISOR (Ecógrafo) ---
             titulo.innerText = "Emisor - Ecógrafo en Vivo";
             statusDiv.innerText = "Solicitando cámara/capturadora...";
 
             navigator.mediaDevices.getUserMedia({ video: true, audio: true })
                 .then(stream => {
                     videoElem.srcObject = stream;
-                    videoElem.muted = true; // Mutear video local para evitar acople acústico
+                    videoElem.muted = true; // Evita eco local
 
                     const idUnico = "eco-" + Math.floor(100000 + Math.random() * 900000);
                     const peer = new Peer(idUnico, peerConfig);
@@ -97,36 +88,45 @@
                 });
 
         } else {
-            // MODO RECEPTOR (Radiólogo)
+            // --- MODO RECEPTOR (Radiólogo) ---
             titulo.innerText = "Receptor - Radiólogo en Línea";
-            statusDiv.innerText = "Conectando con la sala: " + salaParam;
+            statusDiv.innerText = "Conectando al servidor de señalización...";
 
             const peer = new Peer(peerConfig);
 
-            peer.on('open', () => {
-                const call = peer.call(salaParam, null);
+            // Esperar a que el receptor esté 100% conectado antes de llamar
+            peer.on('open', (id) => {
+                statusDiv.innerText = "Conectando con el ecógrafo (" + salaParam + ")...";
 
-                if (!call) {
-                    statusDiv.innerText = " Error de llamada. El emisor no responde.";
+                try {
+                    const call = peer.call(salaParam, null);
+
+                    if (!call) {
+                        statusDiv.innerText = " Error: No se pudo iniciar la llamada. Verifica que el emisor esté abierto.";
+                        statusDiv.style.color = "#ff4444";
+                        return;
+                    }
+
+                    call.on('stream', (remoteStream) => {
+                        statusDiv.innerText = " TRANSMISIÓN EN VIVO ESTABLECIDA";
+                        statusDiv.style.color = "#00ff88";
+                        videoElem.srcObject = remoteStream;
+                        videoElem.play().catch(e => console.log("Autoplay mitigado por el navegador"));
+                    });
+
+                    call.on('error', (err) => {
+                        statusDiv.innerText = " Error en la llamada: " + err;
+                        statusDiv.style.color = "#ff4444";
+                    });
+
+                } catch (e) {
+                    statusDiv.innerText = " Excepción al llamar: " + e.message;
                     statusDiv.style.color = "#ff4444";
-                    return;
                 }
-
-                call.on('stream', (remoteStream) => {
-                    statusDiv.innerText = " TRANSMISIÓN EN VIVO ESTABLECIDA";
-                    statusDiv.style.color = "#00ff88";
-                    videoElem.srcObject = remoteStream;
-                    videoElem.play().catch(e => console.log("Autoplay prevenido por navegador"));
-                });
-
-                call.on('error', (err) => {
-                    statusDiv.innerText = " Error de conexión WebRTC: " + err;
-                    statusDiv.style.color = "#ff4444";
-                });
             });
 
             peer.on('error', (err) => {
-                statusDiv.innerText = " Error: No se encontró la sala " + salaParam + ". ¿El emisor sigue abierto?";
+                statusDiv.innerText = " Error de conexión: La sala " + salaParam + " no existe o fue cerrada.";
                 statusDiv.style.color = "#ff4444";
             });
         }
