@@ -12,7 +12,9 @@
         video { width: 100%; max-width: 800px; height: 450px; background: #000; border: 2px solid #00d2ff; border-radius: 8px; margin-top: 10px; }
         #link-container { display: none; margin-top: 15px; padding: 15px; background: #000; border-radius: 5px; border: 1px solid #00ff88; }
         a { color: #00ff88; font-weight: bold; word-break: break-all; text-decoration: underline; font-size: 1.1rem; }
-        button { padding: 10px 20px; font-size: 1rem; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 10px; }
+        select, button { padding: 10px 15px; font-size: 1rem; border-radius: 5px; border: none; margin: 5px; }
+        select { background: #333; color: white; width: 80%; max-width: 400px; }
+        button { background: #007bff; color: white; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -20,9 +22,16 @@
     <h2 id="titulo">Sistema de Transmisión Ecográfica</h2>
 
     <div class="card">
-        <div id="status">Iniciando sistema...</div>
+        <div id="selector-box" style="display:none;">
+            <label for="videoDevices">Selecciona la Cámara / Capturadora:</label><br><br>
+            <select id="videoDevices"></select><br><br>
+            <button onclick="iniciarTransmision()">Iniciar Transmisión</button>
+        </div>
+
+        <div id="status">Cargando dispositivos de video...</div>
+        
         <div id="link-container">
-            <div>Enlace único para la consulta del Radiólogo:</div>
+            <div>Enlace para la consulta del Radiólogo:</div>
             <p><a id="link-radiologo" href="#" target="_blank">Cargando enlace...</a></p>
         </div>
         <button id="retryBtn" style="display:none;" onclick="location.reload()">Reintentar Conexión</button>
@@ -37,6 +46,8 @@
         const linkRadiologo = document.getElementById('link-radiologo');
         const titulo = document.getElementById('titulo');
         const retryBtn = document.getElementById('retryBtn');
+        const selectorBox = document.getElementById('selector-box');
+        const videoDevices = document.getElementById('videoDevices');
 
         const urlParams = new URLSearchParams(window.location.search);
         const salaParam = urlParams.get('sala');
@@ -46,23 +57,75 @@
                 'iceServers': [
                     { urls: 'stun:stun.l.google.com:19302' },
                     { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelay', credential: 'openrelay' },
-                    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelay', credential: 'openrelay' }
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' }
                 ]
             }
         };
 
+        let streamLocal = null;
+
         if (!salaParam) {
             // MODO EMISOR (Ecógrafo)
             titulo.innerText = "Emisor - Ecógrafo en Vivo";
-            statusDiv.innerText = "Solicitando cámara/capturadora...";
 
+            // Listar cámaras/capturadoras disponibles
             navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                .then(tmpStream => {
+                    tmpStream.getTracks().forEach(track => track.stop()); // Liberar cámara temporal
+                    
+                    navigator.mediaDevices.enumerateDevices().then(devices => {
+                        const videoInputs = devices.filter(d => d.kind === 'videoinput');
+                        videoDevices.innerHTML = '';
+                        videoInputs.forEach((device, index) => {
+                            const option = document.createElement('option');
+                            option.value = device.deviceId;
+                            option.text = device.label || `Cámara / Capturadora ${index + 1}`;
+                            videoDevices.appendChild(option);
+                        });
+                        statusDiv.innerText = "Selecciona la fuente de video y presiona Iniciar.";
+                        selectorBox.style.display = "block";
+                    });
+                })
+                .catch(err => {
+                    statusDiv.innerText = " Error: Otorga permisos de cámara/micrófono en Chrome.";
+                    statusDiv.style.color = "#ff4444";
+                });
+
+        } else {
+            // MODO RECEPTOR (Radiólogo)
+            titulo.innerText = "Receptor - Radiólogo en Línea";
+            statusDiv.innerText = "Estableciendo conexión con la sala: " + salaParam;
+
+            const peer = new Peer(peerConfig);
+
+            peer.on('open', () => {
+                intentarLlamada(peer, salaParam, 1);
+            });
+
+            peer.on('error', (err) => {
+                statusDiv.innerText = " Error de conexión. El emisor no está disponible.";
+                statusDiv.style.color = "#ff4444";
+                retryBtn.style.display = "inline-block";
+            });
+        }
+
+        function iniciarTransmision() {
+            selectorBox.style.display = "none";
+            statusDiv.innerText = "Iniciando señal de video...";
+
+            const selectedDeviceId = videoDevices.value;
+            const constraints = {
+                video: { deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined },
+                audio: true
+            };
+
+            navigator.mediaDevices.getUserMedia(constraints)
                 .then(stream => {
+                    streamLocal = stream;
                     videoElem.srcObject = stream;
                     videoElem.muted = true;
 
-                    // Usar un ID de sala limpio sin caracteres especiales
                     const idUnico = "salaecografia" + Math.floor(1000 + Math.random() * 9000);
                     const peer = new Peer(idUnico, peerConfig);
 
@@ -77,64 +140,52 @@
                     });
 
                     peer.on('call', (call) => {
-                        statusDiv.innerText = " Radiólogo conectando... Enviando señal";
-                        call.answer(stream);
-                        
-                        call.on('stream', () => {
-                            statusDiv.innerText = " Transmisión activa con el Radiólogo";
-                        });
+                        statusDiv.innerText = " Radiólogo conectado. Transmitiendo ecografía...";
+                        call.answer(streamLocal);
                     });
 
                     peer.on('error', (err) => {
                         statusDiv.innerText = "Error del Emisor: " + err.type;
                         statusDiv.style.color = "#ff4444";
-                        retryBtn.style.display = "inline-block";
                     });
                 })
                 .catch(err => {
-                    statusDiv.innerText = " Error: Otorga permisos de cámara en el navegador.";
+                    statusDiv.innerText = " Error al acceder al dispositivo seleccionado: " + err.message;
                     statusDiv.style.color = "#ff4444";
                 });
+        }
 
-        } else {
-            // MODO RECEPTOR (Radiólogo)
-            titulo.innerText = "Receptor - Radiólogo en Línea";
-            statusDiv.innerText = "Estableciendo conexión con la sala: " + salaParam;
-
-            const peer = new Peer(peerConfig);
-
-            peer.on('open', () => {
-                // Pequeño retardo de 800ms para asegurar sincronización en el servidor de señalización
-                setTimeout(() => {
-                    const call = peer.call(salaParam, null);
-
-                    if (!call) {
-                        statusDiv.innerText = " El emisor no respondió. Haz clic en Reintentar.";
-                        statusDiv.style.color = "#ff4444";
-                        retryBtn.style.display = "inline-block";
-                        return;
-                    }
-
-                    call.on('stream', (remoteStream) => {
-                        statusDiv.innerText = " TRANSMISIÓN EN VIVO ESTABLECIDA";
-                        statusDiv.style.color = "#00ff88";
-                        videoElem.srcObject = remoteStream;
-                        videoElem.play();
-                    });
-
-                    call.on('error', (err) => {
-                        statusDiv.innerText = " Error en la llamada: " + err;
-                        statusDiv.style.color = "#ff4444";
-                        retryBtn.style.display = "inline-block";
-                    });
-                }, 800);
-            });
-
-            peer.on('error', (err) => {
-                statusDiv.innerText = " La sala no está disponible. Verifica que el emisor siga abierto.";
+        function intentarLlamada(peer, sala, intento) {
+            if (intento > 3) {
+                statusDiv.innerText = " El emisor no respondió tras varios intentos. Revisa que siga abierto.";
                 statusDiv.style.color = "#ff4444";
                 retryBtn.style.display = "inline-block";
+                return;
+            }
+
+            statusDiv.innerText = `Conectando con el ecógrafo (Intento ${intento}/3)...`;
+            const call = peer.call(sala, null);
+
+            if (!call) {
+                setTimeout(() => intentarLlamada(peer, sala, intento + 1), 1500);
+                return;
+            }
+
+            let conectado = false;
+
+            call.on('stream', (remoteStream) => {
+                conectado = true;
+                statusDiv.innerText = " TRANSMISIÓN EN VIVO ESTABLECIDA";
+                statusDiv.style.color = "#00ff88";
+                videoElem.srcObject = remoteStream;
+                videoElem.play();
             });
+
+            setTimeout(() => {
+                if (!conectado) {
+                    intentarLlamada(peer, sala, intento + 1);
+                }
+            }, 3000);
         }
     </script>
 </body>
