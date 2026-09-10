@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Telemedicina Ecográfica</title>
+    <title>Telemedicina Ecográfica Privada</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; background: #121212; color: #fff; text-align: center; margin: 0; padding: 20px; }
@@ -19,7 +19,7 @@
 </head>
 <body>
 
-    <h2 id="titulo">Sistema de Transmisión Ecográfica</h2>
+    <h2 id="titulo">Sistema de Transmisión Ecográfica Privado</h2>
 
     <div class="card">
         <div id="selector-box" style="display:none;">
@@ -28,10 +28,10 @@
             <button onclick="iniciarTransmision()">Iniciar Transmisión</button>
         </div>
 
-        <div id="status">Cargando dispositivos de video...</div>
+        <div id="status">Conectando con el servidor privado...</div>
         
         <div id="link-container">
-            <div>Enlace para la consulta del Radiólogo:</div>
+            <div>Enlace único para la consulta del Radiólogo:</div>
             <p><a id="link-radiologo" href="#" target="_blank">Cargando enlace...</a></p>
         </div>
         <button id="retryBtn" style="display:none;" onclick="location.reload()">Reintentar Conexión</button>
@@ -52,13 +52,16 @@
         const urlParams = new URLSearchParams(window.location.search);
         const salaParam = urlParams.get('sala');
 
+        // Configuración apuntando a tu servidor privado en Render
         const peerConfig = {
+            host: 'servidor-eco-2.onrender.com',
+            port: 443,
+            path: '/peerjs',
+            secure: true,
             config: {
                 'iceServers': [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' },
-                    { urls: 'stun:stun3.l.google.com:19302' }
+                    { urls: 'stun:stun1.l.google.com:19302' }
                 ]
             }
         };
@@ -69,10 +72,9 @@
             // MODO EMISOR (Ecógrafo)
             titulo.innerText = "Emisor - Ecógrafo en Vivo";
 
-            // Listar cámaras/capturadoras disponibles
             navigator.mediaDevices.getUserMedia({ video: true, audio: true })
                 .then(tmpStream => {
-                    tmpStream.getTracks().forEach(track => track.stop()); // Liberar cámara temporal
+                    tmpStream.getTracks().forEach(track => track.stop());
                     
                     navigator.mediaDevices.enumerateDevices().then(devices => {
                         const videoInputs = devices.filter(d => d.kind === 'videoinput');
@@ -95,16 +97,37 @@
         } else {
             // MODO RECEPTOR (Radiólogo)
             titulo.innerText = "Receptor - Radiólogo en Línea";
-            statusDiv.innerText = "Estableciendo conexión con la sala: " + salaParam;
+            statusDiv.innerText = "Conectando al servidor privado para la sala: " + salaParam;
 
             const peer = new Peer(peerConfig);
 
             peer.on('open', () => {
-                intentarLlamada(peer, salaParam, 1);
+                statusDiv.innerText = "Conectando directamente con el ecógrafo...";
+                const call = peer.call(salaParam, null);
+
+                if (!call) {
+                    statusDiv.innerText = " El emisor no respondió. Intenta de nuevo.";
+                    statusDiv.style.color = "#ff4444";
+                    retryBtn.style.display = "inline-block";
+                    return;
+                }
+
+                call.on('stream', (remoteStream) => {
+                    statusDiv.innerText = " TRANSMISIÓN EN VIVO ESTABLECIDA (Servidor Privado)";
+                    statusDiv.style.color = "#00ff88";
+                    videoElem.srcObject = remoteStream;
+                    videoElem.play();
+                });
+
+                call.on('error', (err) => {
+                    statusDiv.innerText = " Error en la llamada: " + err;
+                    statusDiv.style.color = "#ff4444";
+                    retryBtn.style.display = "inline-block";
+                });
             });
 
             peer.on('error', (err) => {
-                statusDiv.innerText = " Error de conexión. El emisor no está disponible.";
+                statusDiv.innerText = " Error de conexión con la sala. Verifica que el emisor esté abierto.";
                 statusDiv.style.color = "#ff4444";
                 retryBtn.style.display = "inline-block";
             });
@@ -112,7 +135,7 @@
 
         function iniciarTransmision() {
             selectorBox.style.display = "none";
-            statusDiv.innerText = "Iniciando señal de video...";
+            statusDiv.innerText = "Iniciando señal de video en servidor privado...";
 
             const selectedDeviceId = videoDevices.value;
             const constraints = {
@@ -131,7 +154,7 @@
 
                     peer.on('open', (id) => {
                         const urlFinal = window.location.origin + window.location.pathname + "?sala=" + id;
-                        statusDiv.innerText = " TRANSMITIENDO EN VIVO";
+                        statusDiv.innerText = " TRANSMITIENDO EN VIVO (Infraestructura Privada)";
                         statusDiv.style.color = "#00ff88";
                         
                         linkRadiologo.href = urlFinal;
@@ -153,39 +176,6 @@
                     statusDiv.innerText = " Error al acceder al dispositivo seleccionado: " + err.message;
                     statusDiv.style.color = "#ff4444";
                 });
-        }
-
-        function intentarLlamada(peer, sala, intento) {
-            if (intento > 3) {
-                statusDiv.innerText = " El emisor no respondió tras varios intentos. Revisa que siga abierto.";
-                statusDiv.style.color = "#ff4444";
-                retryBtn.style.display = "inline-block";
-                return;
-            }
-
-            statusDiv.innerText = `Conectando con el ecógrafo (Intento ${intento}/3)...`;
-            const call = peer.call(sala, null);
-
-            if (!call) {
-                setTimeout(() => intentarLlamada(peer, sala, intento + 1), 1500);
-                return;
-            }
-
-            let conectado = false;
-
-            call.on('stream', (remoteStream) => {
-                conectado = true;
-                statusDiv.innerText = " TRANSMISIÓN EN VIVO ESTABLECIDA";
-                statusDiv.style.color = "#00ff88";
-                videoElem.srcObject = remoteStream;
-                videoElem.play();
-            });
-
-            setTimeout(() => {
-                if (!conectado) {
-                    intentarLlamada(peer, sala, intento + 1);
-                }
-            }, 3000);
         }
     </script>
 </body>
