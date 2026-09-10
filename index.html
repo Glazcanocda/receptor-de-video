@@ -28,7 +28,7 @@
             <button onclick="iniciarTransmision()">Iniciar Transmisión</button>
         </div>
 
-        <div id="status">Conectando con el servidor privado...</div>
+        <div id="status">Buscando dispositivos de video...</div>
         
         <div id="link-container">
             <div>Enlace único para la consulta del Radiólogo:</div>
@@ -52,7 +52,6 @@
         const urlParams = new URLSearchParams(window.location.search);
         const salaParam = urlParams.get('sala');
 
-        // Configuración apuntando a tu servidor privado en Render
         const peerConfig = {
             host: 'servidor-eco-2.onrender.com',
             port: 443,
@@ -69,16 +68,23 @@
         let streamLocal = null;
 
         if (!salaParam) {
-            // MODO EMISOR (Ecógrafo)
             titulo.innerText = "Emisor - Ecógrafo en Vivo";
 
-            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+            // Pedimos ÚNICAMENTE video para evitar bloqueos por falta de micrófono
+            navigator.mediaDevices.getUserMedia({ video: true, audio: false })
                 .then(tmpStream => {
                     tmpStream.getTracks().forEach(track => track.stop());
                     
                     navigator.mediaDevices.enumerateDevices().then(devices => {
                         const videoInputs = devices.filter(d => d.kind === 'videoinput');
                         videoDevices.innerHTML = '';
+                        
+                        if(videoInputs.length === 0) {
+                            statusDiv.innerText = "Error: No se detectó ninguna cámara o capturadora USB conectada.";
+                            statusDiv.style.color = "#ff4444";
+                            return;
+                        }
+
                         videoInputs.forEach((device, index) => {
                             const option = document.createElement('option');
                             option.value = device.deviceId;
@@ -90,12 +96,12 @@
                     });
                 })
                 .catch(err => {
-                    statusDiv.innerText = " Error: Otorga permisos de cámara/micrófono en Chrome.";
+                    console.error("Error exacto:", err);
+                    statusDiv.innerText = "Error (" + err.name + "): " + err.message;
                     statusDiv.style.color = "#ff4444";
                 });
 
         } else {
-            // MODO RECEPTOR (Radiólogo)
             titulo.innerText = "Receptor - Radiólogo en Línea";
             statusDiv.innerText = "Conectando al servidor privado para la sala: " + salaParam;
 
@@ -106,28 +112,28 @@
                 const call = peer.call(salaParam, null);
 
                 if (!call) {
-                    statusDiv.innerText = " El emisor no respondió. Intenta de nuevo.";
+                    statusDiv.innerText = "El emisor no respondió. Intenta de nuevo.";
                     statusDiv.style.color = "#ff4444";
                     retryBtn.style.display = "inline-block";
                     return;
                 }
 
                 call.on('stream', (remoteStream) => {
-                    statusDiv.innerText = " TRANSMISIÓN EN VIVO ESTABLECIDA (Servidor Privado)";
+                    statusDiv.innerText = "TRANSMISIÓN EN VIVO ESTABLECIDA (Servidor Privado)";
                     statusDiv.style.color = "#00ff88";
                     videoElem.srcObject = remoteStream;
                     videoElem.play();
                 });
 
                 call.on('error', (err) => {
-                    statusDiv.innerText = " Error en la llamada: " + err;
+                    statusDiv.innerText = "Error en la llamada: " + err;
                     statusDiv.style.color = "#ff4444";
                     retryBtn.style.display = "inline-block";
                 });
             });
 
             peer.on('error', (err) => {
-                statusDiv.innerText = " Error de conexión con la sala. Verifica que el emisor esté abierto.";
+                statusDiv.innerText = "Error de conexión con la sala. Verifica que el emisor esté abierto.";
                 statusDiv.style.color = "#ff4444";
                 retryBtn.style.display = "inline-block";
             });
@@ -140,7 +146,7 @@
             const selectedDeviceId = videoDevices.value;
             const constraints = {
                 video: { deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined },
-                audio: true
+                audio: false
             };
 
             navigator.mediaDevices.getUserMedia(constraints)
@@ -154,7 +160,7 @@
 
                     peer.on('open', (id) => {
                         const urlFinal = window.location.origin + window.location.pathname + "?sala=" + id;
-                        statusDiv.innerText = " TRANSMITIENDO EN VIVO (Infraestructura Privada)";
+                        statusDiv.innerText = "TRANSMITIENDO EN VIVO (Infraestructura Privada)";
                         statusDiv.style.color = "#00ff88";
                         
                         linkRadiologo.href = urlFinal;
@@ -163,7 +169,7 @@
                     });
 
                     peer.on('call', (call) => {
-                        statusDiv.innerText = " Radiólogo conectado. Transmitiendo ecografía...";
+                        statusDiv.innerText = "Radiólogo conectado. Transmitiendo ecografía...";
                         call.answer(streamLocal);
                     });
 
@@ -173,7 +179,7 @@
                     });
                 })
                 .catch(err => {
-                    statusDiv.innerText = " Error al acceder al dispositivo seleccionado: " + err.message;
+                    statusDiv.innerText = "Error al acceder al dispositivo seleccionado: " + err.message;
                     statusDiv.style.color = "#ff4444";
                 });
         }
