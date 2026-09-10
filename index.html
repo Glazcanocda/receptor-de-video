@@ -70,7 +70,6 @@
         if (!salaParam) {
             titulo.innerText = "Emisor - Ecógrafo en Vivo";
 
-            // Pedimos ÚNICAMENTE video para evitar bloqueos por falta de micrófono
             navigator.mediaDevices.getUserMedia({ video: true, audio: false })
                 .then(tmpStream => {
                     tmpStream.getTracks().forEach(track => track.stop());
@@ -96,44 +95,45 @@
                     });
                 })
                 .catch(err => {
-                    console.error("Error exacto:", err);
                     statusDiv.innerText = "Error (" + err.name + "): " + err.message;
                     statusDiv.style.color = "#ff4444";
                 });
 
         } else {
             titulo.innerText = "Receptor - Radiólogo en Línea";
-            statusDiv.innerText = "Conectando al servidor privado para la sala: " + salaParam;
+            statusDiv.innerText = "Conectando al servidor privado...";
 
-            const peer = new Peer(peerConfig);
+            // Asignar un ID aleatorio único para el receptor
+            const receptorId = "radiologo" + Math.floor(1000 + Math.random() * 9000);
+            const peer = new Peer(receptorId, peerConfig);
 
             peer.on('open', () => {
-                statusDiv.innerText = "Conectando directamente con el ecógrafo...";
+                statusDiv.innerText = "Conectando con la sala: " + salaParam + "...";
+                
+                // Conexión de datos primero para despertar el canal
+                const conn = peer.connect(salaParam);
+
+                // Iniciar la llamada hacia el emisor
                 const call = peer.call(salaParam, null);
 
-                if (!call) {
-                    statusDiv.innerText = "El emisor no respondió. Intenta de nuevo.";
-                    statusDiv.style.color = "#ff4444";
-                    retryBtn.style.display = "inline-block";
-                    return;
+                if (call) {
+                    call.on('stream', (remoteStream) => {
+                        statusDiv.innerText = "TRANSMISIÓN EN VIVO ESTABLECIDA (Servidor Privado)";
+                        statusDiv.style.color = "#00ff88";
+                        videoElem.srcObject = remoteStream;
+                        videoElem.play();
+                    });
+
+                    call.on('error', (err) => {
+                        statusDiv.innerText = "Error en la recepción de video. Reintentando...";
+                        statusDiv.style.color = "#ff4444";
+                        retryBtn.style.display = "inline-block";
+                    });
                 }
-
-                call.on('stream', (remoteStream) => {
-                    statusDiv.innerText = "TRANSMISIÓN EN VIVO ESTABLECIDA (Servidor Privado)";
-                    statusDiv.style.color = "#00ff88";
-                    videoElem.srcObject = remoteStream;
-                    videoElem.play();
-                });
-
-                call.on('error', (err) => {
-                    statusDiv.innerText = "Error en la llamada: " + err;
-                    statusDiv.style.color = "#ff4444";
-                    retryBtn.style.display = "inline-block";
-                });
             });
 
             peer.on('error', (err) => {
-                statusDiv.innerText = "Error de conexión con la sala. Verifica que el emisor esté abierto.";
+                statusDiv.innerText = "El emisor no respondió o la sala expiró. Genera un nuevo enlace en el emisor.";
                 statusDiv.style.color = "#ff4444";
                 retryBtn.style.display = "inline-block";
             });
@@ -168,9 +168,14 @@
                         linkContainer.style.display = "block";
                     });
 
+                    // Responder automáticamente a las solicitudes de video entrantes
                     peer.on('call', (call) => {
                         statusDiv.innerText = "Radiólogo conectado. Transmitiendo ecografía...";
                         call.answer(streamLocal);
+                    });
+
+                    peer.on('connection', (conn) => {
+                        console.log("Receptor conectado por canal de datos");
                     });
 
                     peer.on('error', (err) => {
