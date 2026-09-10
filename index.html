@@ -52,20 +52,16 @@
         const urlParams = new URLSearchParams(window.location.search);
         const salaParam = urlParams.get('sala');
 
-        // Configuración corregida para el servidor PeerJS en Render
         const peerConfig = {
             host: 'servidor-eco-2.onrender.com',
             port: 443,
             path: '/peerjs',
             secure: true,
-            debug: 2,
             config: {
                 'iceServers': [
                     { urls: 'stun:stun.l.google.com:19302' },
                     { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' },
-                    { urls: 'stun:stun3.l.google.com:19302' },
-                    { urls: 'stun:stun4.l.google.com:19302' }
+                    { urls: 'stun:stun2.l.google.com:19302' }
                 ]
             }
         };
@@ -115,30 +111,30 @@
             peer.on('open', (id) => {
                 statusDiv.innerText = "Llamando a la sala de ecografía...";
                 
-                // Realizar llamada de solo recepción
-                const call = peer.call(salaParam, new MediaStream());
+                // Conexión limpia sin enviar flujo de video desde el receptor
+                const call = peer.call(salaParam, null);
 
-                call.on('stream', (remoteStream) => {
-                    statusDiv.innerText = "TRANSMISIÓN EN VIVO ESTABLECIDA (Servidor Privado)";
-                    statusDiv.style.color = "#00ff88";
-                    videoElem.srcObject = remoteStream;
-                    videoElem.play();
-                });
+                if (call) {
+                    call.on('stream', (remoteStream) => {
+                        statusDiv.innerText = "TRANSMISIÓN EN VIVO ESTABLECIDA (Servidor Privado)";
+                        statusDiv.style.color = "#00ff88";
+                        videoElem.srcObject = remoteStream;
+                        videoElem.play().catch(e => console.log("Autoplay con interacción requerida"));
+                    });
 
-                call.on('close', () => {
-                    statusDiv.innerText = "La transmisión ha finalizado.";
-                    statusDiv.style.color = "#ffc107";
-                });
-
-                call.on('error', (err) => {
-                    statusDiv.innerText = "Error en la transmisión: " + err;
+                    call.on('error', (err) => {
+                        statusDiv.innerText = "Error en la llamada: " + err;
+                        statusDiv.style.color = "#ff4444";
+                        retryBtn.style.display = "inline-block";
+                    });
+                } else {
+                    statusDiv.innerText = "No se pudo conectar con el emisor. Verifica que siga activo.";
                     statusDiv.style.color = "#ff4444";
-                    retryBtn.style.display = "inline-block";
-                });
+                }
             });
 
             peer.on('error', (err) => {
-                statusDiv.innerText = "Error de conexión (" + err.type + "). Verifica que el emisor esté transmitiendo.";
+                statusDiv.innerText = "Error de señalización (" + err.type + "). Genera una nueva sala en el emisor.";
                 statusDiv.style.color = "#ff4444";
                 retryBtn.style.display = "inline-block";
             });
@@ -173,9 +169,9 @@
                         linkContainer.style.display = "block";
                     });
 
-                    // Atender llamadas entrantes enviando el stream local
                     peer.on('call', (call) => {
                         statusDiv.innerText = "Radiólogo conectado. Transmitiendo ecografía...";
+                        // Responder enviando la señal local de la capturadora
                         call.answer(streamLocal);
                     });
 
