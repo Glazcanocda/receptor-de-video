@@ -33,7 +33,7 @@
 
     <header>
         <h1>Plataforma de Telemedicina Ecográfica</h1>
-        <p>Infraestructura Privada de Transmisión P2P</p>
+        <p>Red Privada de Transmisión Directa P2P</p>
     </header>
 
     <div class="container">
@@ -100,12 +100,12 @@
         const centroAuto = urlParams.get('centro');
         const salaAuto = urlParams.get('sala');
 
-        // Servidor autodetección local/Render
+        // Configuración apuntando al servidor privado de Render
         const peerConfig = {
-            host: location.hostname,
-            port: location.port || (location.protocol === 'https:' ? 443 : 80),
+            host: 'servidor-eco-2.onrender.com',
+            port: 443,
             path: '/peerjs',
-            secure: location.protocol === 'https:',
+            secure: true,
             config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }] }
         };
 
