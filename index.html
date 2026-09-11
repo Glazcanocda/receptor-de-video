@@ -12,9 +12,8 @@
         body { background-color: var(--bg-main); color: var(--text-main); min-height: 100vh; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         header { margin-bottom: 25px; text-align: center; }
         header h1 { font-size: 1.8rem; font-weight: 700; color: #fff; }
-        header p { color: var(--text-muted); font-size: 0.95rem; margin-top: 5px; }
         .container { width: 100%; max-width: 950px; }
-        .card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 25px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5); margin-bottom: 20px; text-align: center; }
+        .card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 25px; margin-bottom: 20px; text-align: center; }
         .grid-form { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; text-align: left; }
         @media(max-width: 600px) { .grid-form { grid-template-columns: 1fr; } }
         label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; }
@@ -33,7 +32,6 @@
 
     <header>
         <h1>Plataforma de Telemedicina Ecográfica</h1>
-        <p>Red Privada de Transmisión Directa P2P</p>
     </header>
 
     <div class="container">
@@ -58,11 +56,15 @@
                         <input type="text" id="salaEmisor" placeholder="Ej: sala1">
                     </div>
                 </div>
-                <button class="btn" onclick="iniciarTransmisionPantalla()">Iniciar Transmisión de Pantalla</button>
+                <button class="btn" onclick="iniciarTransmisionPantalla()">Iniciar Transmisión</button>
             </div>
 
             <!-- FORMULARIO RECEPTOR -->
             <div id="receptor-box" style="display:none;">
+                <div style="margin-bottom: 15px; text-align: left;">
+                    <label>Nombre / Identificación del Radiólogo</label>
+                    <input type="text" id="radiologoNombre" placeholder="Ej: Dr. Francisco Pérez">
+                </div>
                 <div class="grid-form">
                     <div>
                         <label>Centro Médico</label>
@@ -100,7 +102,6 @@
         const centroAuto = urlParams.get('centro');
         const salaAuto = urlParams.get('sala');
 
-        // Configuración apuntando al servidor privado de Render
         const peerConfig = {
             host: 'servidor-eco-2.onrender.com',
             port: 443,
@@ -111,7 +112,7 @@
 
         let streamLocal = null;
         let peer = null;
-        let heartbeatInterval = null;
+        let tiempoInicioConexion = null;
 
         function updateStatus(text, color = '#e2e8f0', pulse = false) {
             statusText.innerText = text;
@@ -119,16 +120,6 @@
             statusDot.style.background = color;
             if (pulse) statusDot.classList.add('dot-pulse');
             else statusDot.classList.remove('dot-pulse');
-        }
-
-        function startHeartbeat(p) {
-            if (heartbeatInterval) clearInterval(heartbeatInterval);
-            heartbeatInterval = setInterval(() => {
-                if (p && !p.destroyed) {
-                    if (p.disconnected) { p.reconnect(); }
-                    else { p.socket.send({ type: 'HEARTBEAT' }); }
-                }
-            }, 15000);
         }
 
         function generarSalaId(centro, sala) {
@@ -140,11 +131,11 @@
         window.addEventListener('DOMContentLoaded', () => {
             if (modoAuto === 'emisor' && centroAuto && salaAuto) {
                 const salaId = generarSalaId(centroAuto, salaAuto);
-                updateStatus(`Iniciando transmisión para ${centroAuto.toUpperCase()} - ${salaAuto.toUpperCase()}...`, '#00d2ff');
                 iniciarTransmisionAutomatica(salaId);
             } else if (modoAuto === 'receptor' && centroAuto && salaAuto) {
-                const salaId = generarSalaId(centroAuto, salaAuto);
-                conectarASalaDirecta(salaId);
+                document.getElementById('centroReceptor').value = centroAuto;
+                document.getElementById('salaReceptor').value = salaAuto;
+                configurarModo('receptor');
             } else {
                 modoBox.style.display = 'block';
             }
@@ -152,13 +143,8 @@
 
         function configurarModo(tipo) {
             modoBox.style.display = 'none';
-            if (tipo === 'emisor') {
-                emisorBox.style.display = 'block';
-                updateStatus("Configura el centro y la sala del ecógrafo.");
-            } else {
-                receptorBox.style.display = 'block';
-                updateStatus("Ingresa la ubicación del examen a auditar.");
-            }
+            if (tipo === 'emisor') emisorBox.style.display = 'block';
+            else receptorBox.style.display = 'block';
         }
 
         async function iniciarTransmisionAutomatica(salaId) {
@@ -169,72 +155,74 @@
 
                 peer = new Peer(salaId, peerConfig);
 
-                peer.on('open', (id) => {
-                    startHeartbeat(peer);
-                    updateStatus(`TRANSMITIENDO EN VIVO (ID: ${id})`, '#00ff88', true);
-                });
-
-                peer.on('disconnected', () => { peer.reconnect(); });
+                peer.on('open', (id) => updateStatus(`🔴 TRANSMITIENDO EN VIVO (SALA: ${id})`, '#00ff88', true));
                 peer.on('call', (call) => {
-                    updateStatus(`RADIÓLOGO CONECTADO EN DIRECTO`, '#00ff88', true);
+                    updateStatus(`👨‍⚕️ RADIÓLOGO CONECTADO`, '#00ff88', true);
                     call.answer(streamLocal);
                 });
-                peer.on('error', (err) => {
-                    if (err.type === 'network') peer.reconnect();
-                    else updateStatus(`Error de red: ${err.type}`, '#ff4757');
-                });
             } catch (err) {
-                updateStatus("Permisos de captura de pantalla denegados.", '#ff4757');
+                updateStatus("Permisos no otorgados.", '#ff4757');
             }
         }
 
         function iniciarTransmisionPantalla() {
             const centro = document.getElementById('centroEmisor').value;
             const sala = document.getElementById('salaEmisor').value;
-            if (!centro || !sala) { alert("Ingresa centro y sala."); return; }
-            
-            const salaId = generarSalaId(centro, sala);
-            iniciarTransmisionAutomatica(salaId);
+            if (!centro || !sala) return alert("Ingresa centro y sala.");
+            iniciarTransmisionAutomatica(generarSalaId(centro, sala));
             emisorBox.style.display = 'none';
         }
 
-        function conectarASalaDirecta(salaObjetivo) {
+        function conectarASala() {
+            const radiologo = document.getElementById('radiologoNombre').value.trim();
+            const centro = document.getElementById('centroReceptor').value.trim();
+            const sala = document.getElementById('salaReceptor').value.trim();
+
+            if (!radiologo) return alert("Ingresa tu nombre o identificación de radiólogo.");
+            if (!centro || !sala) return alert("Ingresa centro y sala.");
+
+            const salaObjetivo = generarSalaId(centro, sala);
             updateStatus(`Conectando con ${salaObjetivo}...`, '#ffc107');
 
             if (peer) peer.destroy();
-            const radiologoId = "radiologo_" + Math.floor(1000 + Math.random() * 9000);
-            peer = new Peer(radiologoId, peerConfig);
+            peer = new Peer(peerConfig);
 
             peer.on('open', () => {
-                startHeartbeat(peer);
                 const canvas = document.createElement('canvas');
                 canvas.width = 1; canvas.height = 1;
 
                 const call = peer.call(salaObjetivo, canvas.captureStream());
 
                 if (call) {
+                    tiempoInicioConexion = new Date();
+
                     call.on('stream', (remoteStream) => {
-                        updateStatus(`TRANSMISIÓN EN DIRECTO - SALA: ${salaObjetivo.toUpperCase()}`, '#00ff88', true);
+                        updateStatus(`🔴 EN DIRECTO - SALA: ${salaObjetivo.toUpperCase()}`, '#00ff88', true);
                         videoElem.srcObject = remoteStream;
                         videoElem.play();
                     });
-                    call.on('error', () => updateStatus("Error en la llamada.", '#ff4757'));
-                }
-            });
 
-            peer.on('disconnected', () => { peer.reconnect(); });
-            peer.on('error', (err) => {
-                if (err.type === 'network') peer.reconnect();
-                else updateStatus(`La sala ${salaObjetivo.toUpperCase()} no está transmitiendo.`, '#ff4757');
+                    // Registrar duración exacta al cerrar o terminar la llamada
+                    window.addEventListener('beforeunload', () => registrarFinAtencion(centro, sala, radiologo));
+                }
             });
         }
 
-        function conectarASala() {
-            const centro = document.getElementById('centroReceptor').value;
-            const sala = document.getElementById('salaReceptor').value;
-            if (!centro || !sala) { alert("Ingresa centro y sala."); return; }
-            conectarASalaDirecta(generarSalaId(centro, sala));
-            receptorBox.style.display = 'none';
+        function registrarFinAtencion(centro, sala, radiologo) {
+            if (!tiempoInicioConexion) return;
+            const fin = new Date();
+            const duracionSegundos = Math.round((fin - tiempoInicioConexion) / 1000);
+
+            const payload = JSON.stringify({
+                centro: centro,
+                sala: sala,
+                radiologo: radiologo,
+                inicio: tiempoInicioConexion.toLocaleString('es-CL'),
+                fin: fin.toLocaleString('es-CL'),
+                duracionSegundos: duracionSegundos
+            });
+
+            navigator.sendBeacon('https://servidor-eco-2.onrender.com/api/reportes/registrar', payload);
         }
     </script>
 </body>
