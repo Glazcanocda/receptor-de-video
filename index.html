@@ -66,6 +66,21 @@
         };
 
         let streamLocal = null;
+        let heartbeatInterval = null;
+
+        // Función Keep-Alive para mantener viva la conexión WebSocket en Render
+        function startHeartbeat(peer) {
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
+            heartbeatInterval = setInterval(() => {
+                if (peer && !peer.destroyed) {
+                    if (peer.disconnected) {
+                        peer.reconnect();
+                    } else {
+                        peer.socket.send({ type: 'HEARTBEAT' });
+                    }
+                }
+            }, 15000); // Enviar pulso cada 15 segundos
+        }
 
         if (!salaParam) {
             // MODO EMISOR (Ecógrafo)
@@ -108,9 +123,9 @@
             const peer = new Peer(peerConfig);
 
             peer.on('open', (id) => {
+                startHeartbeat(peer);
                 statusDiv.innerText = "Conectado. Solicitando video a la sala...";
                 
-                // Generar un Stream negro en blanco para negociar la recepción sin enviar cámara
                 const canvas = document.createElement('canvas');
                 canvas.width = 1; canvas.height = 1;
                 const dummyStream = canvas.captureStream();
@@ -118,7 +133,7 @@
                 const call = peer.call(salaParam, dummyStream);
 
                 call.on('stream', (remoteStream) => {
-                    statusDiv.innerText = "TRANSMISTION EN VIVO ESTABLECIDA (Servidor Privado)";
+                    statusDiv.innerText = "TRANSMISIÓN EN VIVO ESTABLECIDA (Servidor Privado)";
                     statusDiv.style.color = "#00ff88";
                     videoElem.srcObject = remoteStream;
                     videoElem.play().catch(e => console.log("Click en pantalla si requiere interacción"));
@@ -131,10 +146,19 @@
                 });
             });
 
+            peer.on('disconnected', () => {
+                statusDiv.innerText = "Reconectando con el servidor privado...";
+                peer.reconnect();
+            });
+
             peer.on('error', (err) => {
-                statusDiv.innerText = "El emisor se desconectó o la sala venció. Genera un nuevo enlace.";
-                statusDiv.style.color = "#ff4444";
-                retryBtn.style.display = "inline-block";
+                if(err.type === 'network') {
+                    peer.reconnect();
+                } else {
+                    statusDiv.innerText = "El emisor se desconectó o la sala venció. Genera un nuevo enlace.";
+                    statusDiv.style.color = "#ff4444";
+                    retryBtn.style.display = "inline-block";
+                }
             });
         }
 
@@ -158,6 +182,7 @@
                     const peer = new Peer(idUnico, peerConfig);
 
                     peer.on('open', (id) => {
+                        startHeartbeat(peer);
                         const urlFinal = window.location.origin + window.location.pathname + "?sala=" + id;
                         statusDiv.innerText = "TRANSMITIENDO EN VIVO (Infraestructura Privada)";
                         statusDiv.style.color = "#00ff88";
@@ -167,14 +192,23 @@
                         linkContainer.style.display = "block";
                     });
 
+                    peer.on('disconnected', () => {
+                        console.log("Desconectado de señalización, reconectando...");
+                        peer.reconnect();
+                    });
+
                     peer.on('call', (call) => {
                         statusDiv.innerText = "Radiólogo conectado. Transmitiendo ecografía...";
                         call.answer(streamLocal);
                     });
 
                     peer.on('error', (err) => {
-                        statusDiv.innerText = "Error del Emisor: " + err.type;
-                        statusDiv.style.color = "#ff4444";
+                        if(err.type === 'network') {
+                            peer.reconnect();
+                        } else {
+                            statusDiv.innerText = "Error del Emisor: " + err.type;
+                            statusDiv.style.color = "#ff4444";
+                        }
                     });
                 })
                 .catch(err => {
