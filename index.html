@@ -21,14 +21,14 @@
     <h2 id="titulo">Central de Telemedicina Ecográfica Privada</h2>
 
     <div class="card">
-        <!-- SELECTOR DE ROL -->
-        <div id="modo-box">
+        <!-- SECCIÓN MANUAL (SOLO SI NO HAY PARÁMETROS) -->
+        <div id="modo-box" style="display:none;">
             <p><strong>Selecciona tu rol en la plataforma:</strong></p>
-            <button onclick="configurarModo('emisor')">🖥️ TRANSMITIR (Ecógrafo / Box)</button>
+            <button onclick="configurarModo('emisor')">🖥️ MODO MANUAL BOX</button>
             <button onclick="configurarModo('receptor')">👨‍⚕️ CENTRAL RADIÓLOGO</button>
         </div>
 
-        <!-- PANEL EMISOR (BOX CLINICO) -->
+        <!-- PANEL EMISOR MANUAL -->
         <div id="emisor-box" style="display:none;">
             <h3>Configurar Transmisión de Box</h3>
             <label>Selecciona la Sala / Box:</label><br><br>
@@ -38,10 +38,10 @@
                 <option value="vina-sala1">Centro Médico Viña - Sala 1</option>
                 <option value="vina-sala2">Centro Médico Viña - Sala 2</option>
             </select><br><br>
-            <button onclick="iniciarTransmisionPantalla()">Iniciar Transmisión de Pantalla</button>
+            <button onclick="iniciarTransmisionPantalla()">Iniciar Transmisión</button>
         </div>
 
-        <!-- PANEL RECEPTOR (RADIÓLOGO) -->
+        <!-- PANEL RECEPTOR (CENTRAL RADIÓLOGO) -->
         <div id="receptor-box" style="display:none;">
             <h3>Central de Monitoreo del Radiólogo</h3>
             <label>Selecciona la Sala a Visitar:</label><br><br>
@@ -54,7 +54,7 @@
             <button onclick="conectarASala()">Conectar a Sala Seleccionada</button>
         </div>
 
-        <div id="status">Esperando selección de modo...</div>
+        <div id="status">Cargando sistema...</div>
     </div>
 
     <video id="videoElem" autoplay playsinline controls></video>
@@ -68,7 +68,11 @@
         const salaSelect = document.getElementById('salaSelect');
         const salaVerSelect = document.getElementById('salaVerSelect');
 
-        // Configuración apuntando a tu servidor privado en Render
+        // Leer parámetros de la URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const modoAuto = urlParams.get('modo');
+        const salaAuto = urlParams.get('sala');
+
         const peerConfig = {
             host: 'servidor-eco-2.onrender.com',
             port: 443,
@@ -96,6 +100,19 @@
             }, 15000);
         }
 
+        // AUTO-INICIO AL CARGAR LA PÁGINA
+        window.addEventListener('DOMContentLoaded', () => {
+            if (modoAuto === 'emisor' && salaAuto) {
+                // Modo desatendido para Mini PC
+                statusDiv.innerText = "Iniciando transmisión automática para " + salaAuto.toUpperCase() + "...";
+                iniciarTransmisionAutomatica(salaAuto);
+            } else {
+                // Modo manual (Radiólogo o Pruebas)
+                modoBox.style.display = 'block';
+                statusDiv.innerText = "Esperando selección de modo...";
+            }
+        });
+
         function configurarModo(tipo) {
             modoBox.style.display = 'none';
             if (tipo === 'emisor') {
@@ -107,13 +124,10 @@
             }
         }
 
-        // --- MODO EMISOR: TRANSMITIR PANTALLA ECÓGRAFO ---
-        async function iniciarTransmisionPantalla() {
-            emisorBox.style.display = 'none';
-            statusDiv.innerText = "Selecciona la pantalla o ventana del ecógrafo a compartir...";
-
+        // --- EMISOR AUTOMÁTICO PARA MINI PC (SIN CLICS REQUERIDOS) ---
+        async function iniciarTransmisionAutomatica(salaId) {
             try {
-                // Captura ÚNICAMENTE de pantalla (audio en false por privacidad)
+                // Capturar pantalla completa por defecto
                 streamLocal = await navigator.mediaDevices.getDisplayMedia({
                     video: { frameRate: { ideal: 30, max: 60 } },
                     audio: false
@@ -122,7 +136,6 @@
                 videoElem.srcObject = streamLocal;
                 videoElem.muted = true;
 
-                const salaId = salaSelect.value;
                 peer = new Peer(salaId, peerConfig);
 
                 peer.on('open', (id) => {
@@ -142,24 +155,32 @@
                 peer.on('error', (err) => {
                     if(err.type === 'network') { peer.reconnect(); }
                     else {
-                        statusDiv.innerText = "Error de conexión: " + err.type;
+                        statusDiv.innerText = "Error en sala (" + err.type + "). Reintentando en 5s...";
                         statusDiv.style.color = "#ff4444";
+                        setTimeout(() => iniciarTransmisionAutomatica(salaId), 5000);
                     }
                 });
 
             } catch (err) {
-                statusDiv.innerText = "Cancelado o permisos de pantalla no otorgados.";
+                statusDiv.innerText = "Error: El navegador requiere seleccionar la pantalla la primera vez.";
                 statusDiv.style.color = "#ff4444";
-                emisorBox.style.display = 'block';
             }
         }
 
-        // --- MODO RECEPTOR: CENTRAL DEL RADIÓLOGO ---
+        // --- EMISOR MANUAL ---
+        function iniciarTransmisionPantalla() {
+            iniciarTransmisionAutomatica(salaSelect.value);
+            emisorBox.style.display = 'none';
+        }
+
+        // --- RECEPTOR (CENTRAL RADIÓLOGO) ---
         function conectarASala() {
             const salaObjetivo = salaVerSelect.value;
             statusDiv.innerText = "Conectando con la sala " + salaObjetivo.toUpperCase() + "...";
 
             if (peer) peer.destroy();
+
+            peer = new Peer(peerConfig);
 
             peer.on('open', () => {
                 startHeartbeat(peer);
@@ -179,7 +200,7 @@
                     });
 
                     call.on('error', (err) => {
-                        statusDiv.innerText = "Error al recibir la señal de la sala.";
+                        statusDiv.innerText = "Error al recibir señal de la sala.";
                         statusDiv.style.color = "#ff4444";
                     });
                 }
