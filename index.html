@@ -7,45 +7,25 @@
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --bg-main: #0a0e17;
-            --card-bg: #141b2d;
-            --accent-blue: #00d2ff;
-            --accent-green: #00ff88;
-            --accent-red: #ff4757;
-            --text-main: #e2e8f0;
-            --text-muted: #94a3b8;
-            --border-color: #1e293b;
-        }
-
+        :root { --bg-main: #0a0e17; --card-bg: #141b2d; --accent-blue: #00d2ff; --accent-green: #00ff88; --text-main: #e2e8f0; --text-muted: #94a3b8; --border-color: #1e293b; }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
         body { background-color: var(--bg-main); color: var(--text-main); min-height: 100vh; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-
         header { margin-bottom: 25px; text-align: center; }
-        header h1 { font-size: 1.8rem; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
+        header h1 { font-size: 1.8rem; font-weight: 700; color: #fff; }
         header p { color: var(--text-muted); font-size: 0.95rem; margin-top: 5px; }
-
         .container { width: 100%; max-width: 950px; }
         .card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 25px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5); margin-bottom: 20px; text-align: center; }
-
         .grid-form { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; text-align: left; }
         @media(max-width: 600px) { .grid-form { grid-template-columns: 1fr; } }
-
-        label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-        select, input { width: 100%; background: #0f172a; border: 1px solid var(--border-color); color: #fff; padding: 12px 14px; border-radius: 8px; font-size: 0.95rem; outline: none; transition: border-color 0.2s; }
-        select:focus, input:focus { border-color: var(--accent-blue); }
-
-        .btn { background: linear-gradient(135deg, #0052d4, #4364f7, #6fb1fc); color: white; border: none; padding: 12px 24px; font-size: 1rem; font-weight: 600; border-radius: 8px; cursor: pointer; transition: transform 0.1s, opacity 0.2s; width: 100%; }
-        .btn:hover { opacity: 0.9; }
-        .btn:active { transform: scale(0.98); }
+        label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; }
+        select, input { width: 100%; background: #0f172a; border: 1px solid var(--border-color); color: #fff; padding: 12px 14px; border-radius: 8px; font-size: 0.95rem; outline: none; }
+        .btn { background: linear-gradient(135deg, #0052d4, #4364f7, #6fb1fc); color: white; border: none; padding: 12px 24px; font-size: 1rem; font-weight: 600; border-radius: 8px; cursor: pointer; width: 100%; }
         .btn-green { background: linear-gradient(135deg, #11998e, #38ef7d); color: #000; }
-
         #status-bar { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 12px; border-radius: 8px; background: rgba(15, 23, 42, 0.6); font-size: 0.95rem; font-weight: 600; border: 1px solid var(--border-color); }
         .dot { width: 10px; height: 10px; border-radius: 50%; background: #e2e8f0; }
         .dot-pulse { animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 255, 136, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(0, 255, 136, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 255, 136, 0); } }
-
-        .video-wrapper { position: relative; width: 100%; border-radius: 12px; overflow: hidden; background: #000; border: 1px solid var(--border-color); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7); }
+        .video-wrapper { position: relative; width: 100%; border-radius: 12px; overflow: hidden; background: #000; border: 1px solid var(--border-color); }
         video { width: 100%; height: 500px; display: block; object-fit: contain; }
     </style>
 </head>
@@ -53,7 +33,7 @@
 
     <header>
         <h1>Plataforma de Telemedicina Ecográfica</h1>
-        <p>Red Privada de Transmisión Directa P2P</p>
+        <p>Infraestructura Privada de Transmisión P2P</p>
     </header>
 
     <div class="container">
@@ -71,15 +51,11 @@
                 <div class="grid-form">
                     <div>
                         <label>Centro Médico</label>
-                        <select id="centroEmisor">
-                            <option value="quillota">Centro Médico Quillota</option>
-                            <option value="vina">Centro Médico Viña del Mar</option>
-                            <option value="valparaiso">Clínica Valparaíso</option>
-                        </select>
+                        <input type="text" id="centroEmisor" placeholder="Ej: quillota">
                     </div>
                     <div>
-                        <label>Identificador de Sala / Box</label>
-                        <input type="text" id="salaEmisor" placeholder="Ej: sala1, box-ecografia">
+                        <label>Sala / Box</label>
+                        <input type="text" id="salaEmisor" placeholder="Ej: sala1">
                     </div>
                 </div>
                 <button class="btn" onclick="iniciarTransmisionPantalla()">Iniciar Transmisión de Pantalla</button>
@@ -89,16 +65,12 @@
             <div id="receptor-box" style="display:none;">
                 <div class="grid-form">
                     <div>
-                        <label>Seleccionar Centro Médico</label>
-                        <select id="centroReceptor">
-                            <option value="quillota">Centro Médico Quillota</option>
-                            <option value="vina">Centro Médico Viña del Mar</option>
-                            <option value="valparaiso">Clínica Valparaíso</option>
-                        </select>
+                        <label>Centro Médico</label>
+                        <input type="text" id="centroReceptor" placeholder="Ej: quillota">
                     </div>
                     <div>
-                        <label>Ingresar Sala / Box</label>
-                        <input type="text" id="salaReceptor" placeholder="Ej: sala1, box-ecografia">
+                        <label>Sala / Box</label>
+                        <input type="text" id="salaReceptor" placeholder="Ej: sala1">
                     </div>
                 </div>
                 <button class="btn btn-green" onclick="conectarASala()">Conectar con el Ecógrafo</button>
@@ -128,14 +100,13 @@
         const centroAuto = urlParams.get('centro');
         const salaAuto = urlParams.get('sala');
 
+        // Servidor autodetección local/Render
         const peerConfig = {
-            host: 'servidor-eco-2.onrender.com',
-            port: 443,
+            host: location.hostname,
+            port: location.port || (location.protocol === 'https:' ? 443 : 80),
             path: '/peerjs',
-            secure: true,
-            config: {
-                'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }]
-            }
+            secure: location.protocol === 'https:',
+            config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }] }
         };
 
         let streamLocal = null;
@@ -171,6 +142,9 @@
                 const salaId = generarSalaId(centroAuto, salaAuto);
                 updateStatus(`Iniciando transmisión para ${centroAuto.toUpperCase()} - ${salaAuto.toUpperCase()}...`, '#00d2ff');
                 iniciarTransmisionAutomatica(salaId);
+            } else if (modoAuto === 'receptor' && centroAuto && salaAuto) {
+                const salaId = generarSalaId(centroAuto, salaAuto);
+                conectarASalaDirecta(salaId);
             } else {
                 modoBox.style.display = 'block';
             }
@@ -217,23 +191,19 @@
         function iniciarTransmisionPantalla() {
             const centro = document.getElementById('centroEmisor').value;
             const sala = document.getElementById('salaEmisor').value;
-            if (!sala) { alert("Por favor ingresa un identificador de sala."); return; }
+            if (!centro || !sala) { alert("Ingresa centro y sala."); return; }
             
             const salaId = generarSalaId(centro, sala);
             iniciarTransmisionAutomatica(salaId);
             emisorBox.style.display = 'none';
         }
 
-        function conectarASala() {
-            const centro = document.getElementById('centroReceptor').value;
-            const sala = document.getElementById('salaReceptor').value;
-            if (!sala) { alert("Por favor ingresa la sala a auditar."); return; }
-
-            const salaObjetivo = generarSalaId(centro, sala);
+        function conectarASalaDirecta(salaObjetivo) {
             updateStatus(`Conectando con ${salaObjetivo}...`, '#ffc107');
 
             if (peer) peer.destroy();
-            peer = new Peer(peerConfig);
+            const radiologoId = "radiologo_" + Math.floor(1000 + Math.random() * 9000);
+            peer = new Peer(radiologoId, peerConfig);
 
             peer.on('open', () => {
                 startHeartbeat(peer);
@@ -257,6 +227,14 @@
                 if (err.type === 'network') peer.reconnect();
                 else updateStatus(`La sala ${salaObjetivo.toUpperCase()} no está transmitiendo.`, '#ff4757');
             });
+        }
+
+        function conectarASala() {
+            const centro = document.getElementById('centroReceptor').value;
+            const sala = document.getElementById('salaReceptor').value;
+            if (!centro || !sala) { alert("Ingresa centro y sala."); return; }
+            conectarASalaDirecta(generarSalaId(centro, sala));
+            receptorBox.style.display = 'none';
         }
     </script>
 </body>
