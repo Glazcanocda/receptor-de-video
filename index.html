@@ -10,8 +10,8 @@
         .card { background: #1e1e1e; padding: 20px; margin: 15px auto; border-radius: 8px; max-width: 700px; border: 1px solid #333; }
         #status { font-size: 1.2rem; font-weight: bold; color: #ffc107; margin: 15px 0; }
         video { width: 100%; max-width: 900px; height: 500px; background: #000; border: 2px solid #00d2ff; border-radius: 8px; margin-top: 10px; }
-        select, button { padding: 12px 18px; font-size: 1rem; border-radius: 5px; border: none; margin: 5px; }
-        select { background: #333; color: white; width: 75%; }
+        select, button, input { padding: 12px 18px; font-size: 1rem; border-radius: 5px; border: none; margin: 5px; }
+        select, input { background: #333; color: white; width: 75%; }
         button { background: #007bff; color: white; cursor: pointer; font-weight: bold; }
         button:hover { background: #0056b3; }
     </style>
@@ -21,7 +21,7 @@
     <h2 id="titulo">Central de Telemedicina Ecográfica Privada</h2>
 
     <div class="card">
-        <!-- SECCIÓN MANUAL (SOLO SI NO HAY PARÁMETROS) -->
+        <!-- SECCIÓN MANUAL -->
         <div id="modo-box" style="display:none;">
             <p><strong>Selecciona tu rol en la plataforma:</strong></p>
             <button onclick="configurarModo('emisor')">🖥️ MODO MANUAL BOX</button>
@@ -31,26 +31,16 @@
         <!-- PANEL EMISOR MANUAL -->
         <div id="emisor-box" style="display:none;">
             <h3>Configurar Transmisión de Box</h3>
-            <label>Selecciona la Sala / Box:</label><br><br>
-            <select id="salaSelect">
-                <option value="quillota-sala1">Centro Médico Quillota - Sala 1</option>
-                <option value="quillota-sala2">Centro Médico Quillota - Sala 2</option>
-                <option value="vina-sala1">Centro Médico Viña - Sala 1</option>
-                <option value="vina-sala2">Centro Médico Viña - Sala 2</option>
-            </select><br><br>
+            <label>Selecciona o escribe el ID de la Sala:</label><br><br>
+            <input type="text" id="salaInputEmisor" placeholder="Ej: quillota-sala1"><br><br>
             <button onclick="iniciarTransmisionPantalla()">Iniciar Transmisión</button>
         </div>
 
         <!-- PANEL RECEPTOR (CENTRAL RADIÓLOGO) -->
         <div id="receptor-box" style="display:none;">
             <h3>Central de Monitoreo del Radiólogo</h3>
-            <label>Selecciona la Sala a Visitar:</label><br><br>
-            <select id="salaVerSelect">
-                <option value="quillota-sala1">Centro Médico Quillota - Sala 1</option>
-                <option value="quillota-sala2">Centro Médico Quillota - Sala 2</option>
-                <option value="vina-sala1">Centro Médico Viña - Sala 1</option>
-                <option value="vina-sala2">Centro Médico Viña - Sala 2</option>
-            </select><br><br>
+            <label>Ingresa o Selecciona el Código de Sala:</label><br><br>
+            <input type="text" id="salaInputReceptor" placeholder="Ej: quillota-sala1"><br><br>
             <button onclick="conectarASala()">Conectar a Sala Seleccionada</button>
         </div>
 
@@ -65,10 +55,9 @@
         const modoBox = document.getElementById('modo-box');
         const emisorBox = document.getElementById('emisor-box');
         const receptorBox = document.getElementById('receptor-box');
-        const salaSelect = document.getElementById('salaSelect');
-        const salaVerSelect = document.getElementById('salaVerSelect');
+        const salaInputEmisor = document.getElementById('salaInputEmisor');
+        const salaInputReceptor = document.getElementById('salaInputReceptor');
 
-        // Leer parámetros de la URL
         const urlParams = new URLSearchParams(window.location.search);
         const modoAuto = urlParams.get('modo');
         const salaAuto = urlParams.get('sala');
@@ -100,14 +89,11 @@
             }, 15000);
         }
 
-        // AUTO-INICIO AL CARGAR LA PÁGINA
         window.addEventListener('DOMContentLoaded', () => {
             if (modoAuto === 'emisor' && salaAuto) {
-                // Modo desatendido para Mini PC
                 statusDiv.innerText = "Iniciando transmisión automática para " + salaAuto.toUpperCase() + "...";
                 iniciarTransmisionAutomatica(salaAuto);
             } else {
-                // Modo manual (Radiólogo o Pruebas)
                 modoBox.style.display = 'block';
                 statusDiv.innerText = "Esperando selección de modo...";
             }
@@ -117,17 +103,15 @@
             modoBox.style.display = 'none';
             if (tipo === 'emisor') {
                 emisorBox.style.display = 'block';
-                statusDiv.innerText = "Selecciona la sala e inicia la transmisión de pantalla.";
+                statusDiv.innerText = "Ingresa el identificador de la sala e inicia transmisión.";
             } else {
                 receptorBox.style.display = 'block';
-                statusDiv.innerText = "Selecciona la sala del paciente que deseas revisar.";
+                statusDiv.innerText = "Ingresa el identificador de la sala que deseas auditar.";
             }
         }
 
-        // --- EMISOR AUTOMÁTICO PARA MINI PC (SIN CLICS REQUERIDOS) ---
         async function iniciarTransmisionAutomatica(salaId) {
             try {
-                // Capturar pantalla completa por defecto
                 streamLocal = await navigator.mediaDevices.getDisplayMedia({
                     video: { frameRate: { ideal: 30, max: 60 } },
                     audio: false
@@ -140,7 +124,7 @@
 
                 peer.on('open', (id) => {
                     startHeartbeat(peer);
-                    statusDiv.innerText = "🔴 TRANSMITIENDO PANTALLA EN VIVO - SALA: " + id.toUpperCase();
+                    statusDiv.innerText = "🔴 TRANSMITIENDO EN VIVO - SALA: " + id.toUpperCase();
                     statusDiv.style.color = "#00ff88";
                 });
 
@@ -155,28 +139,29 @@
                 peer.on('error', (err) => {
                     if(err.type === 'network') { peer.reconnect(); }
                     else {
-                        statusDiv.innerText = "Error en sala (" + err.type + "). Reintentando en 5s...";
+                        statusDiv.innerText = "Error en sala (" + err.type + "). Reintentando...";
                         statusDiv.style.color = "#ff4444";
-                        setTimeout(() => iniciarTransmisionAutomatica(salaId), 5000);
                     }
                 });
 
             } catch (err) {
-                statusDiv.innerText = "Error: El navegador requiere seleccionar la pantalla la primera vez.";
+                statusDiv.innerText = "Permisos de captura de pantalla no otorgados.";
                 statusDiv.style.color = "#ff4444";
             }
         }
 
-        // --- EMISOR MANUAL ---
         function iniciarTransmisionPantalla() {
-            iniciarTransmisionAutomatica(salaSelect.value);
+            const sala = salaInputEmisor.value.trim();
+            if(!sala) { alert("Ingresa un nombre de sala"); return; }
+            iniciarTransmisionAutomatica(sala);
             emisorBox.style.display = 'none';
         }
 
-        // --- RECEPTOR (CENTRAL RADIÓLOGO) ---
         function conectarASala() {
-            const salaObjetivo = salaVerSelect.value;
-            statusDiv.innerText = "Conectando con la sala " + salaObjetivo.toUpperCase() + "...";
+            const salaObjetivo = salaInputReceptor.value.trim();
+            if(!salaObjetivo) { alert("Ingresa el código de la sala"); return; }
+
+            statusDiv.innerText = "Conectando con " + salaObjetivo.toUpperCase() + "...";
 
             if (peer) peer.destroy();
 
@@ -200,7 +185,7 @@
                     });
 
                     call.on('error', (err) => {
-                        statusDiv.innerText = "Error al recibir señal de la sala.";
+                        statusDiv.innerText = "Error al conectar con la sala.";
                         statusDiv.style.color = "#ff4444";
                     });
                 }
@@ -211,7 +196,7 @@
             peer.on('error', (err) => {
                 if(err.type === 'network') { peer.reconnect(); }
                 else {
-                    statusDiv.innerText = "La sala " + salaObjetivo.toUpperCase() + " no está transmitiendo en este momento.";
+                    statusDiv.innerText = "La sala " + salaObjetivo.toUpperCase() + " no está transmitiendo.";
                     statusDiv.style.color = "#ff4444";
                 }
             });
